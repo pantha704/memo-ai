@@ -50,13 +50,15 @@ const ChatInterface = () => {
       console.log(data)
 
       setMessages((prev) => [...prev, data as Message])
-    } catch (error: any) {
+    } catch (error) {
       console.error('Chat error:', error)
+      const errorMessage =
+        error instanceof Error ? error.message : 'An unknown error occurred'
       setMessages((prev) => [
         ...prev,
         {
           role: 'assistant',
-          content: `Error: ${error.message}`,
+          content: `Error: ${errorMessage}`,
         },
       ])
     } finally {

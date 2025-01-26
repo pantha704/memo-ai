@@ -1,14 +1,15 @@
 import { NextResponse } from 'next/server'
-import {
-  GoogleGenerativeAI,
-  HarmCategory,
-  HarmBlockThreshold,
-} from '@google/generative-ai'
+import { GoogleGenerativeAI } from '@google/generative-ai'
+
+interface Message {
+  role: 'user' | 'assistant'
+  content: string
+}
 
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY!)
 
 export async function POST(req: Request) {
-  const { messages } = await req.json()
+  const { messages } = (await req.json()) as { messages: Message[] }
 
   try {
     const model = genAI.getGenerativeModel({
@@ -17,7 +18,7 @@ export async function POST(req: Request) {
 
     // Convert messages to Gemini's format
     const chat = model.startChat({
-      history: messages.slice(0, -1).map((msg: any) => ({
+      history: messages.slice(0, -1).map((msg: Message) => ({
         role: msg.role === 'assistant' ? 'model' : 'user',
         parts: [{ text: msg.content }],
       })),
@@ -32,15 +33,19 @@ export async function POST(req: Request) {
     const text = await response.text()
 
     return NextResponse.json({
-      role: 'model',
+      role: 'assistant',
       content: text,
     })
-  } catch (error: any) {
+  } catch (error) {
     console.error('Gemini API Error:', error)
     let errorMessage = 'API Error'
 
     // Handle safety filters
-    if (error?.message?.includes('block_reason')) {
+    if (
+      error instanceof Error &&
+      error.message &&
+      error.message.includes('block_reason')
+    ) {
       errorMessage = `Content blocked: ${
         error.message.split('block_reason: ')[1]
       }`
