@@ -1,7 +1,10 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { motion } from 'framer-motion'
+import DOMPurify from 'dompurify'
+import { remark } from 'remark'
+import html from 'remark-html'
 
 interface Message {
   role: 'user' | 'assistant'
@@ -12,6 +15,7 @@ const ChatInterface = () => {
   const [messages, setMessages] = useState<Message[]>([])
   const [input, setInput] = useState<string>('')
   const [isLoading, setIsLoading] = useState<boolean>(false)
+  const [processedMessages, setProcessedMessages] = useState<string[]>([])
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault()
@@ -60,8 +64,24 @@ const ChatInterface = () => {
     }
   }
 
+  // Update the markdown converter
+  const markdownToHtml = async (markdown: string) => {
+    const processed = await remark().use(html).process(markdown)
+    return DOMPurify.sanitize(processed.toString())
+  }
+
+  useEffect(() => {
+    const processMessages = async () => {
+      const processed = await Promise.all(
+        messages.map((message) => markdownToHtml(message.content))
+      )
+      setProcessedMessages(processed)
+    }
+    processMessages()
+  }, [messages])
+
   return (
-    <div className="max-w-3xl mx-auto p-4 h-screen flex flex-col">
+    <div className="max-w-3xl mx-auto p-4 max-h-screen flex flex-col">
       <div className="flex-1 overflow-y-auto mb-4 space-y-4">
         {messages.map((message, index) => (
           <motion.div
@@ -73,14 +93,15 @@ const ChatInterface = () => {
             }`}
           >
             <div
-              className={`max-w-md p-4 rounded-lg ${
+              className={`max-w-md p-4 rounded-lg prose dark:prose-invert ${
                 message.role === 'user'
                   ? 'bg-blue-500 text-white'
                   : 'bg-gray-100 dark:bg-gray-800'
               }`}
-            >
-              {message.content}
-            </div>
+              dangerouslySetInnerHTML={{
+                __html: processedMessages[index] || '',
+              }}
+            />
           </motion.div>
         ))}
       </div>
