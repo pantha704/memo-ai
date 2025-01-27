@@ -6,6 +6,8 @@ import DOMPurify from 'dompurify'
 import { remark } from 'remark'
 import html from 'remark-html'
 import rehypeHighlight from 'rehype-highlight'
+import remarkGfm from 'remark-gfm'
+import remarkBreaks from 'remark-breaks'
 import 'highlight.js/styles/github-dark.css'
 import {
   IconBrain,
@@ -199,13 +201,21 @@ const ChatInterface = () => {
   }
 
   const markdownToHtml = async (markdown: string) => {
+    // Add two spaces at the end of each line to force line breaks
+    const textWithBreaks = markdown
+      .split('\n')
+      .map((line) => line.trim() + '  ')
+      .join('\n')
+
     const processed = await remark()
-      .use(html)
+      .use(remarkGfm) // Support GitHub Flavored Markdown
+      .use(remarkBreaks) // Convert single line breaks to <br>
+      .use(html, { sanitize: false }) // Don't sanitize here as we'll use DOMPurify later
       .use(rehypeHighlight)
-      .process(markdown)
+      .process(textWithBreaks)
 
     return DOMPurify.sanitize(processed.toString(), {
-      ADD_TAGS: ['code', 'span'],
+      ADD_TAGS: ['code', 'span', 'pre', 'br'],
       ADD_ATTR: ['class'],
     })
   }
@@ -351,6 +361,7 @@ const ChatInterface = () => {
                               prose-hr:my-4
                               prose-strong:text-[#ECBFBF]
                               prose-a:text-[#5C24FF]
+                              prose-p:mb-4 prose-p:leading-relaxed
                               [&_pre]:overflow-x-auto [&_pre]:scrollbar-thin [&_pre]:scrollbar-track-[#0F0F0F] [&_pre]:scrollbar-thumb-[#2D2D2D]
                               ${message.role === 'assistant' ? 'pr-10' : ''}`}
                             dangerouslySetInnerHTML={{
@@ -360,6 +371,32 @@ const ChatInterface = () => {
                         </motion.div>
                       </motion.div>
                     ))}
+                    {isLoading && (
+                      <motion.div
+                        initial={{ opacity: 0, y: 20 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        exit={{ opacity: 0, y: -20 }}
+                        transition={{ duration: 0.3 }}
+                        className="flex justify-start"
+                      >
+                        <motion.div
+                          className="max-w-[85%] p-4 rounded-xl shadow-lg bg-[#1C1C1C] border border-[#2D2D2D] text-white"
+                          animate={{
+                            opacity: [0.5, 1, 0.5],
+                          }}
+                          transition={{
+                            duration: 2,
+                            repeat: Infinity,
+                            ease: 'easeInOut',
+                          }}
+                        >
+                          <div className="flex items-center gap-2">
+                            <IconBrain size={16} className="text-[#5C24FF]" />
+                            <span className="text-[#B4BCD0]">Thinking...</span>
+                          </div>
+                        </motion.div>
+                      </motion.div>
+                    )}
                     <div
                       ref={messagesEndRef}
                       className="h-1"
