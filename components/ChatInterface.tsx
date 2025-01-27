@@ -12,6 +12,8 @@ import {
   IconCode,
   IconDatabase,
   IconRobot,
+  IconCopy,
+  IconCheck,
 } from '@tabler/icons-react'
 import { BackgroundGradientAnimation } from './ui/background'
 import { HeroHighlight } from './ui/hero-highlight'
@@ -116,6 +118,7 @@ const ChatInterface = () => {
   const [processedMessages, setProcessedMessages] = useState<string[]>([])
   const [examplePrompts, setExamplePrompts] = useState(initialPrompts)
   const messagesEndRef = useRef<HTMLDivElement>(null)
+  const [copiedIndex, setCopiedIndex] = useState<number | null>(null)
 
   // Shuffle prompts after initial mount
   useEffect(() => {
@@ -123,12 +126,33 @@ const ChatInterface = () => {
     setExamplePrompts(shuffled)
   }, [])
 
+  const scrollToBottom = (behavior: 'smooth' | 'auto' = 'smooth') => {
+    if (messagesEndRef.current) {
+      messagesEndRef.current.scrollIntoView({ behavior, block: 'end' })
+    }
+  }
+
+  // Scroll on new messages
+  useEffect(() => {
+    scrollToBottom()
+  }, [messages, processedMessages])
+
+  // Scroll when loading starts
+  useEffect(() => {
+    if (isLoading) {
+      scrollToBottom()
+    }
+  }, [isLoading])
+
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault()
     if (!input.trim() || isLoading) return
 
     try {
       setIsLoading(true)
+      // Scroll immediately when user sends message
+      setTimeout(() => scrollToBottom(), 100)
+
       const newMessages: Message[] = [
         ...messages,
         { role: 'user', content: input },
@@ -156,6 +180,8 @@ const ChatInterface = () => {
       console.log(data)
 
       setMessages((prev) => [...prev, data as Message])
+      // Scroll after response is received
+      setTimeout(() => scrollToBottom(), 100)
     } catch (error) {
       console.error('Chat error:', error)
       const errorMessage =
@@ -194,15 +220,21 @@ const ChatInterface = () => {
     processMessages()
   }, [messages])
 
-  useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
-  }, [messages])
+  const handleCopy = async (text: string, index: number) => {
+    try {
+      await navigator.clipboard.writeText(text)
+      setCopiedIndex(index)
+      setTimeout(() => setCopiedIndex(null), 2000)
+    } catch (err) {
+      console.error('Failed to copy text:', err)
+    }
+  }
 
   return (
-    <div className="fixed inset-0 bg-[#0F0F0F]">
+    <div className="fixed inset-0 bg-[#0F0F0F] overflow-hidden">
       <BackgroundGradientAnimation />
       <HeroHighlight />
-      <div className="absolute inset-0 flex flex-col h-screen">
+      <div className="absolute inset-0 flex flex-col h-full">
         <motion.div
           initial={{ opacity: 0, y: -10 }}
           animate={{ opacity: 1, y: 0 }}
@@ -218,93 +250,125 @@ const ChatInterface = () => {
           </div>
         </motion.div>
 
-        <div className="flex-1 flex flex-col max-w-4xl w-full mx-auto px-4 sm:px-6 lg:px-8 relative z-10 min-h-0">
-          <div className="flex-1 overflow-y-auto pr-6 scrollbar-thin scrollbar-track-[#1C1C1C] scrollbar-thumb-[#2D2D2D] hover:scrollbar-thumb-[#3D3D3D] min-h-0 scroll-smooth">
-            <AnimatePresence mode="popLayout">
-              {messages.length === 0 ? (
-                <motion.div className="h-full flex flex-col items-center justify-center">
-                  <div className="grid grid-cols-2 gap-4 w-full max-w-2xl px-4">
-                    {examplePrompts.map((prompt, index) => (
-                      <motion.button
-                        key={index}
-                        initial={{ opacity: 0, y: 10 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        transition={{
-                          duration: 0.2,
-                          delay: index * 0.03,
-                          ease: 'easeOut',
-                        }}
-                        whileHover={{
-                          scale: 1.02,
-                          backgroundColor: 'rgba(255, 255, 255, 0.03)',
-                        }}
-                        whileTap={{ scale: 0.98 }}
-                        onClick={() => setInput(prompt.text)}
-                        className="p-4 text-left rounded-xl border border-[#2D2D2D]
-                          hover:border-[#3D3D3D] transition-all duration-300
-                          bg-[#1C1C1C] text-[#B4BCD0] text-sm
-                          hover:shadow-[0_0_15px_rgba(0,0,0,0.2)]"
-                      >
-                        <div className="flex items-center gap-3">
-                          <span className="text-[#5C24FF]">{prompt.icon}</span>
-                          <span>{prompt.text}</span>
-                        </div>
-                      </motion.button>
-                    ))}
-                  </div>
-                </motion.div>
-              ) : (
-                <div className="py-6 space-y-6 pl-4">
-                  {messages.map((message, index) => (
-                    <motion.div
-                      key={index}
-                      initial={{ opacity: 0, y: 20 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      exit={{ opacity: 0, y: -20 }}
-                      transition={{ duration: 0.3 }}
-                      className={`flex ${
-                        message.role === 'user'
-                          ? 'justify-end'
-                          : 'justify-start'
-                      }`}
-                    >
+        <div className="flex-1 flex flex-col max-w-4xl w-full mx-auto px-4 sm:px-6 lg:px-8 relative z-10 overflow-hidden">
+          <div className="flex-1 overflow-y-auto pr-6 scrollbar-thin scrollbar-track-[#1C1C1C] scrollbar-thumb-[#2D2D2D] hover:scrollbar-thumb-[#3D3D3D] scroll-smooth">
+            <div className="min-h-0 h-full pb-4">
+              <AnimatePresence mode="popLayout">
+                {messages.length === 0 ? (
+                  <motion.div className="h-full flex flex-col items-center justify-center">
+                    <div className="grid grid-cols-2 gap-4 w-full max-w-2xl px-4">
+                      {examplePrompts.map((prompt, index) => (
+                        <motion.button
+                          key={index}
+                          initial={{ opacity: 0, y: 10 }}
+                          animate={{ opacity: 1, y: 0 }}
+                          transition={{
+                            duration: 0.2,
+                            delay: index * 0.03,
+                            ease: 'easeOut',
+                          }}
+                          whileHover={{
+                            scale: 1.02,
+                            backgroundColor: 'rgba(255, 255, 255, 0.03)',
+                          }}
+                          whileTap={{ scale: 0.98 }}
+                          onClick={() => setInput(prompt.text)}
+                          className="p-4 text-left rounded-xl border border-[#2D2D2D]
+                            hover:border-[#3D3D3D] transition-all duration-300
+                            bg-[#1C1C1C] text-[#B4BCD0] text-sm
+                            hover:shadow-[0_0_15px_rgba(0,0,0,0.2)]"
+                        >
+                          <div className="flex items-center gap-3">
+                            <span className="text-[#5C24FF]">
+                              {prompt.icon}
+                            </span>
+                            <span>{prompt.text}</span>
+                          </div>
+                        </motion.button>
+                      ))}
+                    </div>
+                  </motion.div>
+                ) : (
+                  <div className="py-6 space-y-6 pl-4">
+                    {messages.map((message, index) => (
                       <motion.div
-                        whileHover={{ scale: 1.01 }}
-                        transition={{ type: 'spring', stiffness: 300 }}
-                        className={`max-w-[85%] p-4 rounded-xl shadow-lg overflow-hidden
-                          ${
-                            message.role === 'user'
-                              ? 'bg-gradient-to-r from-[#5C24FF] to-[#8047FF] text-white'
-                              : 'bg-[#1C1C1C] border border-[#2D2D2D] text-white'
-                          }`}
+                        key={index}
+                        initial={{ opacity: 0, y: 20 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        exit={{ opacity: 0, y: -20 }}
+                        transition={{ duration: 0.3 }}
+                        className={`flex ${
+                          message.role === 'user'
+                            ? 'justify-end'
+                            : 'justify-start'
+                        }`}
                       >
-                        <div
-                          className={`prose prose-sm max-w-none break-words prose-invert overflow-x-auto
+                        <motion.div
+                          whileHover={{ scale: 1.01 }}
+                          transition={{ type: 'spring', stiffness: 300 }}
+                          className={`max-w-[85%] p-4 rounded-xl shadow-lg overflow-hidden relative group
                             ${
                               message.role === 'user'
-                                ? 'prose-p:text-white/90'
-                                : 'prose-p:text-white/90'
-                            }
-                            prose-pre:my-2 prose-pre:p-4 prose-pre:rounded-lg prose-pre:bg-[#0F0F0F]
-                            prose-code:px-1.5 prose-code:py-0.5 prose-code:rounded-md
-                            prose-code:bg-[#0F0F0F] prose-code:text-[#ECBFBF]
-                            prose-headings:mb-2 prose-headings:mt-4 prose-headings:text-[#ECBFBF]
-                            prose-ul:my-2 prose-li:my-0.5 prose-li:text-white/90
-                            prose-hr:my-4
-                            prose-strong:text-[#ECBFBF]
-                            prose-a:text-[#5C24FF]
-                            [&_pre]:overflow-x-auto [&_pre]:scrollbar-thin [&_pre]:scrollbar-track-[#0F0F0F] [&_pre]:scrollbar-thumb-[#2D2D2D]`}
-                          dangerouslySetInnerHTML={{
-                            __html: processedMessages[index] || '',
-                          }}
-                        />
+                                ? 'bg-gradient-to-r from-[#5C24FF] to-[#8047FF] text-white'
+                                : 'bg-[#1C1C1C] border border-[#2D2D2D] text-white'
+                            }`}
+                        >
+                          {message.role === 'assistant' && (
+                            <motion.button
+                              initial={{ opacity: 0 }}
+                              animate={{ opacity: 1 }}
+                              onClick={() => handleCopy(message.content, index)}
+                              className="absolute top-3 right-3 p-2 rounded-lg bg-[#2D2D2D]/50 
+                                opacity-0 group-hover:opacity-100 transition-opacity duration-200
+                                hover:bg-[#2D2D2D] focus:outline-none focus:ring-2 focus:ring-[#5C24FF]/30"
+                              aria-label="Copy response"
+                            >
+                              {copiedIndex === index ? (
+                                <IconCheck
+                                  size={16}
+                                  className="text-green-400"
+                                />
+                              ) : (
+                                <IconCopy
+                                  size={16}
+                                  className="text-[#B4BCD0]"
+                                />
+                              )}
+                            </motion.button>
+                          )}
+                          <div
+                            className={`prose prose-sm max-w-none break-words prose-invert overflow-x-auto
+                              ${
+                                message.role === 'user'
+                                  ? 'prose-p:text-white/90'
+                                  : 'prose-p:text-white/90'
+                              }
+                              prose-pre:my-2 prose-pre:p-4 prose-pre:rounded-lg prose-pre:bg-[#0F0F0F]
+                              prose-code:px-1.5 prose-code:py-0.5 prose-code:rounded-md
+                              prose-code:bg-[#0F0F0F] prose-code:text-[#ECBFBF]
+                              prose-headings:mb-2 prose-headings:mt-4 prose-headings:text-[#ECBFBF]
+                              prose-ul:my-2 prose-li:my-0.5 prose-li:text-white/90
+                              prose-hr:my-4
+                              prose-strong:text-[#ECBFBF]
+                              prose-a:text-[#5C24FF]
+                              [&_pre]:overflow-x-auto [&_pre]:scrollbar-thin [&_pre]:scrollbar-track-[#0F0F0F] [&_pre]:scrollbar-thumb-[#2D2D2D]
+                              ${message.role === 'assistant' ? 'pr-10' : ''}`}
+                            dangerouslySetInnerHTML={{
+                              __html: processedMessages[index] || '',
+                            }}
+                          />
+                        </motion.div>
                       </motion.div>
-                    </motion.div>
-                  ))}
-                  <div ref={messagesEndRef} className="h-4" />
-                </div>
-              )}
-            </AnimatePresence>
+                    ))}
+                    <div
+                      ref={messagesEndRef}
+                      className="h-1"
+                      aria-hidden="true"
+                    />
+                  </div>
+                )}
+              </AnimatePresence>
+            </div>
           </div>
 
           <motion.form
