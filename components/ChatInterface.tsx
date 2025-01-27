@@ -20,10 +20,19 @@ import {
 import { BackgroundGradientAnimation } from './ui/background'
 import { HeroHighlight } from './ui/hero-highlight'
 import { TextHoverEffect } from './ui/text-hover-effect'
+import { Sidebar } from './ui/sidebar'
+import { v4 as uuidv4 } from 'uuid'
 
 interface Message {
   role: 'user' | 'assistant'
   content: string
+}
+
+interface Conversation {
+  id: string
+  title: string
+  timestamp: Date
+  messages: Message[]
 }
 
 const allPrompts = [
@@ -114,6 +123,10 @@ const initialPrompts = [
 ]
 
 const ChatInterface = () => {
+  const [conversations, setConversations] = useState<Conversation[]>([])
+  const [currentConversationId, setCurrentConversationId] = useState<
+    string | null
+  >(null)
   const [messages, setMessages] = useState<Message[]>([])
   const [input, setInput] = useState<string>('')
   const [isLoading, setIsLoading] = useState<boolean>(false)
@@ -121,12 +134,188 @@ const ChatInterface = () => {
   const [examplePrompts, setExamplePrompts] = useState(initialPrompts)
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const [copiedIndex, setCopiedIndex] = useState<number | null>(null)
+  const [showTitle, setShowTitle] = useState(true)
 
-  // Shuffle prompts after initial mount
+  // Load conversations from localStorage on mount
   useEffect(() => {
-    const shuffled = [...allPrompts].sort(() => Math.random() - 0.5).slice(0, 4)
-    setExamplePrompts(shuffled)
+    const savedConversations = localStorage.getItem('conversations')
+    if (savedConversations) {
+      const parsed = JSON.parse(savedConversations)
+      setConversations(
+        parsed.map((conv: any) => ({
+          ...conv,
+          timestamp: new Date(conv.timestamp),
+        }))
+      )
+    }
   }, [])
+
+  // Save conversations to localStorage when they change
+  useEffect(() => {
+    localStorage.setItem('conversations', JSON.stringify(conversations))
+  }, [conversations])
+
+  // Update messages when conversation changes
+  useEffect(() => {
+    if (currentConversationId) {
+      const conversation = conversations.find(
+        (c) => c.id === currentConversationId
+      )
+      if (conversation) {
+        setMessages(conversation.messages)
+      }
+    } else {
+      setMessages([])
+    }
+  }, [currentConversationId, conversations])
+
+  // Add effect to handle title visibility
+  useEffect(() => {
+    if (messages.length > 0 || input.length > 0) {
+      setShowTitle(false)
+    } else {
+      setShowTitle(true)
+    }
+  }, [messages.length, input.length])
+
+  // Add this effect to clean up empty chats
+  useEffect(() => {
+    setConversations((prev) =>
+      prev.filter(
+        (conv) => conv.messages.length > 0 || conv.id === currentConversationId
+      )
+    )
+  }, [currentConversationId])
+
+  const handleNewChat = () => {
+    // If there's a current conversation with no messages, don't create a new one
+    const currentConversation = conversations.find(
+      (c) => c.id === currentConversationId
+    )
+    if (currentConversation && currentConversation.messages.length === 0) {
+      return
+    }
+
+    const newId = uuidv4()
+    setConversations((prev) => [
+      {
+        id: newId,
+        title: 'New Chat',
+        timestamp: new Date(),
+        messages: [],
+      },
+      ...prev,
+    ])
+    setCurrentConversationId(newId)
+    setMessages([])
+    setProcessedMessages([])
+  }
+
+  const updateConversationTitle = (id: string, firstMessage: string) => {
+    setConversations((prev) =>
+      prev.map((conv) => {
+        if (conv.id === id) {
+          // Use the first ~30 characters of the first message as the title
+          const title =
+            firstMessage.split('\n')[0].slice(0, 30) +
+            (firstMessage.length > 30 ? '...' : '')
+          return { ...conv, title }
+        }
+        return conv
+      })
+    )
+  }
+
+  const handleDeleteConversation = (id: string) => {
+    setConversations((prev) => prev.filter((conv) => conv.id !== id))
+    if (currentConversationId === id) {
+      setCurrentConversationId(null)
+      setMessages([])
+      setProcessedMessages([])
+      setShowTitle(true)
+    }
+  }
+
+  const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault()
+    if (!input.trim() || isLoading) return
+
+    try {
+      setIsLoading(true)
+      setTimeout(() => scrollToBottom(), 100)
+
+      // Create new conversation if none exists
+      if (!currentConversationId) {
+        handleNewChat()
+      }
+
+      const newMessage = { role: 'user' as const, content: input }
+      const newMessages = [...messages, newMessage]
+
+      setMessages(newMessages)
+      setInput('')
+
+      // Update conversation in state
+      setConversations((prev) =>
+        prev.map((conv) => {
+          if (conv.id === currentConversationId) {
+            return { ...conv, messages: newMessages, timestamp: new Date() }
+          }
+          return conv
+        })
+      )
+
+      // Update title if this is the first message
+      if (messages.length === 0) {
+        updateConversationTitle(currentConversationId!, input)
+      }
+
+      const response = await fetch('/api/chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ messages: newMessages }),
+      })
+
+      if (!response.ok) {
+        throw new Error((await response.text()) || 'API request failed')
+      }
+
+      const data = await response.json()
+      const updatedMessages = [...newMessages, data as Message]
+
+      setMessages(updatedMessages)
+      setConversations((prev) =>
+        prev.map((conv) => {
+          if (conv.id === currentConversationId) {
+            return { ...conv, messages: updatedMessages, timestamp: new Date() }
+          }
+          return conv
+        })
+      )
+
+      setTimeout(() => scrollToBottom(), 100)
+    } catch (error) {
+      console.error('Chat error:', error)
+      const errorMessage =
+        error instanceof Error ? error.message : 'An unknown error occurred'
+      const errorResponse = {
+        role: 'assistant' as const,
+        content: `Error: ${errorMessage}`,
+      }
+
+      setMessages((prev) => [...prev, errorResponse])
+      setConversations((prev) =>
+        prev.map((conv) => {
+          if (conv.id === currentConversationId) {
+            return { ...conv, messages: [...conv.messages, errorResponse] }
+          }
+          return conv
+        })
+      )
+    } finally {
+      setIsLoading(false)
+    }
+  }
 
   const scrollToBottom = (behavior: 'smooth' | 'auto' = 'smooth') => {
     if (messagesEndRef.current) {
@@ -145,60 +334,6 @@ const ChatInterface = () => {
       scrollToBottom()
     }
   }, [isLoading])
-
-  const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
-    e.preventDefault()
-    if (!input.trim() || isLoading) return
-
-    try {
-      setIsLoading(true)
-      // Scroll immediately when user sends message
-      setTimeout(() => scrollToBottom(), 100)
-
-      const newMessages: Message[] = [
-        ...messages,
-        { role: 'user', content: input },
-      ]
-
-      setMessages(newMessages)
-      setInput('')
-
-      const response = await fetch('/api/chat', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          messages: newMessages,
-        }),
-      })
-
-      if (!response.ok) {
-        const errorData = await response.json()
-        throw new Error(errorData.error || 'API request failed')
-      }
-
-      const data = await response.json()
-      console.log(data)
-
-      setMessages((prev) => [...prev, data as Message])
-      // Scroll after response is received
-      setTimeout(() => scrollToBottom(), 100)
-    } catch (error) {
-      console.error('Chat error:', error)
-      const errorMessage =
-        error instanceof Error ? error.message : 'An unknown error occurred'
-      setMessages((prev) => [
-        ...prev,
-        {
-          role: 'assistant',
-          content: `Error: ${errorMessage}`,
-        },
-      ])
-    } finally {
-      setIsLoading(false)
-    }
-  }
 
   const markdownToHtml = async (markdown: string) => {
     // Add two spaces at the end of each line to force line breaks
@@ -241,209 +376,227 @@ const ChatInterface = () => {
   }
 
   return (
-    <div className="fixed inset-0 bg-[#0F0F0F] overflow-hidden">
-      <BackgroundGradientAnimation />
-      <HeroHighlight />
-      <div className="absolute inset-0 flex flex-col h-full">
-        <motion.div
-          initial={{ opacity: 0, y: -10 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.2 }}
-          className="flex-none text-center py-6 relative z-10"
-        >
-          <div className="h-[120px] w-[500px] mx-auto">
-            <TextHoverEffect
-              text="MemoBot"
-              textSize="text-7xl"
-              strokeWidth="0.3"
-            />
-          </div>
-        </motion.div>
+    <div className="fixed inset-0 bg-[#0F0F0F] overflow-hidden flex">
+      <Sidebar
+        conversations={conversations}
+        currentConversationId={currentConversationId}
+        onNewChat={handleNewChat}
+        onSelectConversation={setCurrentConversationId}
+        onDeleteConversation={handleDeleteConversation}
+      />
+      <div className="flex-1 flex flex-col h-full w-full">
+        <BackgroundGradientAnimation />
+        <HeroHighlight />
+        <div className="absolute inset-0 flex flex-col h-full">
+          <AnimatePresence mode="wait">
+            {showTitle && (
+              <motion.div
+                initial={{ opacity: 1, y: 0, height: 120 }}
+                animate={{ opacity: 1, y: 0, height: 120 }}
+                exit={{ opacity: 0, y: -20, height: 0 }}
+                transition={{ duration: 0.3 }}
+                className="flex-none text-center py-6 relative z-10 w-full overflow-hidden"
+              >
+                <div className="h-[120px] w-[500px] mx-auto">
+                  <TextHoverEffect
+                    text="MemoBot"
+                    textSize="text-7xl"
+                    strokeWidth="0.3"
+                  />
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
 
-        <div className="flex-1 flex flex-col max-w-4xl w-full mx-auto px-4 sm:px-6 lg:px-8 relative z-10 overflow-hidden">
-          <div className="flex-1 overflow-y-auto pr-6 scrollbar-thin scrollbar-track-[#1C1C1C] scrollbar-thumb-[#2D2D2D] hover:scrollbar-thumb-[#3D3D3D] scroll-smooth">
-            <div className="min-h-0 h-full pb-4">
-              <AnimatePresence mode="popLayout">
-                {messages.length === 0 ? (
-                  <motion.div className="h-full flex flex-col items-center justify-center">
-                    <div className="grid grid-cols-2 gap-4 w-full max-w-2xl px-4">
-                      {examplePrompts.map((prompt, index) => (
-                        <motion.button
-                          key={index}
-                          initial={{ opacity: 0, y: 10 }}
-                          animate={{ opacity: 1, y: 0 }}
-                          transition={{
-                            duration: 0.2,
-                            delay: index * 0.03,
-                            ease: 'easeOut',
-                          }}
-                          whileHover={{
-                            scale: 1.02,
-                            backgroundColor: 'rgba(255, 255, 255, 0.03)',
-                          }}
-                          whileTap={{ scale: 0.98 }}
-                          onClick={() => setInput(prompt.text)}
-                          className="p-4 text-left rounded-xl border border-[#2D2D2D]
-                            hover:border-[#3D3D3D] transition-all duration-300
-                            bg-[#1C1C1C] text-[#B4BCD0] text-sm
-                            hover:shadow-[0_0_15px_rgba(0,0,0,0.2)]"
-                        >
-                          <div className="flex items-center gap-3">
-                            <span className="text-[#5C24FF]">
-                              {prompt.icon}
-                            </span>
-                            <span>{prompt.text}</span>
-                          </div>
-                        </motion.button>
-                      ))}
-                    </div>
-                  </motion.div>
-                ) : (
-                  <div className="py-6 space-y-6 pl-4">
-                    {messages.map((message, index) => (
-                      <motion.div
-                        key={index}
-                        initial={{ opacity: 0, y: 20 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        exit={{ opacity: 0, y: -20 }}
-                        transition={{ duration: 0.3 }}
-                        className={`flex ${
-                          message.role === 'user'
-                            ? 'justify-end'
-                            : 'justify-start'
-                        }`}
-                      >
+          <div className="flex-1 flex flex-col max-w-4xl w-full mx-auto px-4 sm:px-6 lg:px-8 relative z-10 overflow-hidden">
+            <div className="flex-1 overflow-y-auto pr-6 scrollbar-thin scrollbar-track-[#1C1C1C] scrollbar-thumb-[#2D2D2D] hover:scrollbar-thumb-[#3D3D3D] scroll-smooth">
+              <div className="min-h-0 h-full pb-4">
+                <AnimatePresence mode="popLayout">
+                  {messages.length === 0 ? (
+                    <motion.div className="h-full flex flex-col items-center justify-center">
+                      <div className="grid grid-cols-2 gap-4 w-full max-w-2xl px-4">
+                        {examplePrompts.map((prompt, index) => (
+                          <motion.button
+                            key={index}
+                            initial={{ opacity: 0, y: 10 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            transition={{
+                              duration: 0.2,
+                              delay: index * 0.03,
+                              ease: 'easeOut',
+                            }}
+                            whileHover={{
+                              scale: 1.02,
+                              backgroundColor: 'rgba(255, 255, 255, 0.03)',
+                            }}
+                            whileTap={{ scale: 0.98 }}
+                            onClick={() => setInput(prompt.text)}
+                            className="p-4 text-left rounded-xl border border-[#2D2D2D]
+                              hover:border-[#3D3D3D] transition-all duration-300
+                              bg-[#1C1C1C] text-[#B4BCD0] text-sm
+                              hover:shadow-[0_0_15px_rgba(0,0,0,0.2)]"
+                          >
+                            <div className="flex items-center gap-3">
+                              <span className="text-[#5C24FF]">
+                                {prompt.icon}
+                              </span>
+                              <span>{prompt.text}</span>
+                            </div>
+                          </motion.button>
+                        ))}
+                      </div>
+                    </motion.div>
+                  ) : (
+                    <div className="py-6 space-y-6 pl-4">
+                      {messages.map((message, index) => (
                         <motion.div
-                          whileHover={{ scale: 1.01 }}
-                          transition={{ type: 'spring', stiffness: 300 }}
-                          className={`max-w-[85%] p-4 rounded-xl shadow-lg overflow-hidden relative group
-                            ${
-                              message.role === 'user'
-                                ? 'bg-gradient-to-r from-[#5C24FF] to-[#8047FF] text-white'
-                                : 'bg-[#1C1C1C] border border-[#2D2D2D] text-white'
-                            }`}
+                          key={index}
+                          initial={{ opacity: 0, y: 20 }}
+                          animate={{ opacity: 1, y: 0 }}
+                          exit={{ opacity: 0, y: -20 }}
+                          transition={{ duration: 0.3 }}
+                          className={`flex ${
+                            message.role === 'user'
+                              ? 'justify-end'
+                              : 'justify-start'
+                          }`}
                         >
-                          {message.role === 'assistant' && (
-                            <motion.button
-                              initial={{ opacity: 0 }}
-                              animate={{ opacity: 1 }}
-                              onClick={() => handleCopy(message.content, index)}
-                              className="absolute top-3 right-3 p-2 rounded-lg bg-[#2D2D2D]/50 
-                                opacity-0 group-hover:opacity-100 transition-opacity duration-200
-                                hover:bg-[#2D2D2D] focus:outline-none focus:ring-2 focus:ring-[#5C24FF]/30"
-                              aria-label="Copy response"
-                            >
-                              {copiedIndex === index ? (
-                                <IconCheck
-                                  size={16}
-                                  className="text-green-400"
-                                />
-                              ) : (
-                                <IconCopy
-                                  size={16}
-                                  className="text-[#B4BCD0]"
-                                />
-                              )}
-                            </motion.button>
-                          )}
-                          <div
-                            className={`prose prose-sm max-w-none break-words prose-invert overflow-x-auto
+                          <motion.div
+                            whileHover={{ scale: 1.01 }}
+                            transition={{ type: 'spring', stiffness: 300 }}
+                            className={`max-w-[85%] p-4 rounded-xl shadow-lg overflow-hidden relative group
                               ${
                                 message.role === 'user'
-                                  ? 'prose-p:text-white/90'
-                                  : 'prose-p:text-white/90'
-                              }
-                              prose-pre:my-2 prose-pre:p-4 prose-pre:rounded-lg prose-pre:bg-[#0F0F0F]
-                              prose-code:px-1.5 prose-code:py-0.5 prose-code:rounded-md
-                              prose-code:bg-[#0F0F0F] prose-code:text-[#ECBFBF]
-                              prose-headings:mb-2 prose-headings:mt-4 prose-headings:text-[#ECBFBF]
-                              prose-ul:my-2 prose-li:my-0.5 prose-li:text-white/90
-                              prose-hr:my-4
-                              prose-strong:text-[#ECBFBF]
-                              prose-a:text-[#5C24FF]
-                              prose-p:mb-4 prose-p:leading-relaxed
-                              [&_pre]:overflow-x-auto [&_pre]:scrollbar-thin [&_pre]:scrollbar-track-[#0F0F0F] [&_pre]:scrollbar-thumb-[#2D2D2D]
-                              ${message.role === 'assistant' ? 'pr-10' : ''}`}
-                            dangerouslySetInnerHTML={{
-                              __html: processedMessages[index] || '',
-                            }}
-                          />
+                                  ? 'bg-gradient-to-r from-[#5C24FF] to-[#8047FF] text-white'
+                                  : 'bg-[#1C1C1C] border border-[#2D2D2D] text-white'
+                              }`}
+                          >
+                            {message.role === 'assistant' && (
+                              <motion.button
+                                initial={{ opacity: 0 }}
+                                animate={{ opacity: 1 }}
+                                onClick={() =>
+                                  handleCopy(message.content, index)
+                                }
+                                className="absolute top-3 right-3 p-2 rounded-lg bg-[#2D2D2D]/50 
+                                  opacity-0 group-hover:opacity-100 transition-opacity duration-200
+                                  hover:bg-[#2D2D2D] focus:outline-none focus:ring-2 focus:ring-[#5C24FF]/30"
+                                aria-label="Copy response"
+                              >
+                                {copiedIndex === index ? (
+                                  <IconCheck
+                                    size={16}
+                                    className="text-green-400"
+                                  />
+                                ) : (
+                                  <IconCopy
+                                    size={16}
+                                    className="text-[#B4BCD0]"
+                                  />
+                                )}
+                              </motion.button>
+                            )}
+                            <div
+                              className={`prose prose-sm max-w-none break-words prose-invert overflow-x-auto
+                                ${
+                                  message.role === 'user'
+                                    ? 'prose-p:text-white/90'
+                                    : 'prose-p:text-white/90'
+                                }
+                                prose-pre:my-2 prose-pre:p-4 prose-pre:rounded-lg prose-pre:bg-[#0F0F0F]
+                                prose-code:px-1.5 prose-code:py-0.5 prose-code:rounded-md
+                                prose-code:bg-[#0F0F0F] prose-code:text-[#ECBFBF]
+                                prose-headings:mb-2 prose-headings:mt-4 prose-headings:text-[#ECBFBF]
+                                prose-ul:my-2 prose-li:my-0.5 prose-li:text-white/90
+                                prose-hr:my-4
+                                prose-strong:text-[#ECBFBF]
+                                prose-a:text-[#5C24FF]
+                                prose-p:mb-4 prose-p:leading-relaxed
+                                [&_pre]:overflow-x-auto [&_pre]:scrollbar-thin [&_pre]:scrollbar-track-[#0F0F0F] [&_pre]:scrollbar-thumb-[#2D2D2D]
+                                ${message.role === 'assistant' ? 'pr-10' : ''}`}
+                              dangerouslySetInnerHTML={{
+                                __html: processedMessages[index] || '',
+                              }}
+                            />
+                          </motion.div>
                         </motion.div>
-                      </motion.div>
-                    ))}
-                    {isLoading && (
-                      <motion.div
-                        initial={{ opacity: 0, y: 20 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        exit={{ opacity: 0, y: -20 }}
-                        transition={{ duration: 0.3 }}
-                        className="flex justify-start"
-                      >
+                      ))}
+                      {isLoading && (
                         <motion.div
-                          className="max-w-[85%] p-4 rounded-xl shadow-lg bg-[#1C1C1C] border border-[#2D2D2D] text-white"
-                          animate={{
-                            opacity: [0.5, 1, 0.5],
-                          }}
-                          transition={{
-                            duration: 2,
-                            repeat: Infinity,
-                            ease: 'easeInOut',
-                          }}
+                          initial={{ opacity: 0, y: 20 }}
+                          animate={{ opacity: 1, y: 0 }}
+                          exit={{ opacity: 0, y: -20 }}
+                          transition={{ duration: 0.3 }}
+                          className="flex justify-start"
                         >
-                          <div className="flex items-center gap-2">
-                            <IconBrain size={16} className="text-[#5C24FF]" />
-                            <span className="text-[#B4BCD0]">Thinking...</span>
-                          </div>
+                          <motion.div
+                            className="max-w-[85%] p-4 rounded-xl shadow-lg bg-[#1C1C1C] border border-[#2D2D2D] text-white"
+                            animate={{
+                              opacity: [0.5, 1, 0.5],
+                            }}
+                            transition={{
+                              duration: 2,
+                              repeat: Infinity,
+                              ease: 'easeInOut',
+                            }}
+                          >
+                            <div className="flex items-center gap-2">
+                              <IconBrain size={16} className="text-[#5C24FF]" />
+                              <span className="text-[#B4BCD0]">
+                                Thinking...
+                              </span>
+                            </div>
+                          </motion.div>
                         </motion.div>
-                      </motion.div>
-                    )}
-                    <div
-                      ref={messagesEndRef}
-                      className="h-1"
-                      aria-hidden="true"
-                    />
-                  </div>
-                )}
-              </AnimatePresence>
+                      )}
+                      <div
+                        ref={messagesEndRef}
+                        className="h-1"
+                        aria-hidden="true"
+                      />
+                    </div>
+                  )}
+                </AnimatePresence>
+              </div>
             </div>
-          </div>
 
-          <motion.form
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.5 }}
-            onSubmit={handleSubmit}
-            className="flex-none py-6 bg-gradient-to-t from-[#0F0F0F] via-[#0F0F0F]/80 relative z-20"
-          >
-            <div className="flex gap-3">
-              <motion.input
-                type="text"
-                value={input}
-                onChange={(e) => setInput(e.target.value)}
-                placeholder="Ask me anything..."
-                className="flex-1 p-4 rounded-xl border border-[#2D2D2D]
-                  bg-[#1C1C1C] text-[#B4BCD0]
-                  focus:outline-none focus:ring-2 focus:ring-[#5C24FF]/30
-                  placeholder-[#4D4D4D]"
-                disabled={isLoading}
-                whileFocus={{ scale: 1.01 }}
-              />
-              <motion.button
-                type="submit"
-                whileHover={{ scale: 1.02 }}
-                whileTap={{ scale: 0.98 }}
-                transition={{ type: 'spring', stiffness: 400 }}
-                className="px-8 py-4 bg-gradient-to-r from-[#5C24FF] to-[#8047FF] text-white rounded-xl
-                  hover:opacity-90 disabled:opacity-50 disabled:hover:opacity-50
-                  transition-all focus:outline-none focus:ring-2 
-                  focus:ring-[#5C24FF]/30 font-medium shadow-lg
-                  shadow-[#5C24FF]/20"
-                disabled={isLoading}
-              >
-                {isLoading ? 'Sending...' : 'Send'}
-              </motion.button>
-            </div>
-          </motion.form>
+            <motion.form
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.5 }}
+              onSubmit={handleSubmit}
+              className="flex-none py-6 bg-gradient-to-t from-[#0F0F0F] via-[#0F0F0F]/80 relative z-20"
+            >
+              <div className="flex gap-3">
+                <motion.input
+                  type="text"
+                  value={input}
+                  onChange={(e) => setInput(e.target.value)}
+                  placeholder="Ask me anything..."
+                  className="flex-1 p-4 rounded-xl border border-[#2D2D2D]
+                    bg-[#1C1C1C] text-[#B4BCD0]
+                    focus:outline-none focus:ring-2 focus:ring-[#5C24FF]/30
+                    placeholder-[#4D4D4D]"
+                  disabled={isLoading}
+                  whileFocus={{ scale: 1.01 }}
+                />
+                <motion.button
+                  type="submit"
+                  whileHover={{ scale: 1.02 }}
+                  whileTap={{ scale: 0.98 }}
+                  transition={{ type: 'spring', stiffness: 400 }}
+                  className="px-8 py-4 bg-gradient-to-r from-[#5C24FF] to-[#8047FF] text-white rounded-xl
+                    hover:opacity-90 disabled:opacity-50 disabled:hover:opacity-50
+                    transition-all focus:outline-none focus:ring-2 
+                    focus:ring-[#5C24FF]/30 font-medium shadow-lg
+                    shadow-[#5C24FF]/20"
+                  disabled={isLoading}
+                >
+                  {isLoading ? 'Sending...' : 'Send'}
+                </motion.button>
+              </div>
+            </motion.form>
+          </div>
         </div>
       </div>
     </div>
