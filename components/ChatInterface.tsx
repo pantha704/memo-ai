@@ -19,21 +19,11 @@ import {
 } from '@tabler/icons-react'
 import { BackgroundGradientAnimation } from './ui/background'
 import { HeroHighlight } from './ui/hero-highlight'
+// import { TextHoverEffect } from './ui/text-hover-effect'
 import { TextHoverEffect } from './ui/text-hover-effect'
 import { Sidebar } from './ui/sidebar'
 import { v4 as uuidv4 } from 'uuid'
-
-interface Message {
-  role: 'user' | 'assistant'
-  content: string
-}
-
-interface Conversation {
-  id: string
-  title: string
-  timestamp: Date
-  messages: Message[]
-}
+import { Message, Conversation } from '@/types/chat'
 
 // Initial set of prompts that will be shown first (stable order for SSR)
 const initialPrompts = [
@@ -56,6 +46,12 @@ const initialPrompts = [
 ]
 
 const ChatInterface = () => {
+  const [isClient, setIsClient] = useState(false)
+
+  useEffect(() => {
+    setIsClient(true)
+  }, [])
+
   const [conversations, setConversations] = useState<Conversation[]>([])
   const [currentConversationId, setCurrentConversationId] = useState<
     string | null
@@ -333,15 +329,39 @@ const ChatInterface = () => {
     }
   }
 
+  if (!isClient) {
+    return (
+      <div className="fixed inset-0 bg-[#0F0F0F] overflow-hidden flex">
+        <div className="flex-1 flex flex-col h-full w-full">
+          <BackgroundGradientAnimation />
+          <HeroHighlight />
+          <div className="absolute inset-0 flex flex-col h-full">
+            <div className="flex-none text-center py-6 relative z-10 w-full overflow-hidden">
+              <div className="h-[120px] w-[600px] mx-auto">
+                <TextHoverEffect
+                  text="MemoBot"
+                  textSize="text-8xl sm:text-7xl md:text-8xl"
+                  strokeWidth="0.5"
+                />
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
   return (
     <div className="fixed inset-0 bg-[#0F0F0F] overflow-hidden flex">
-      <Sidebar
-        conversations={conversations}
-        currentConversationId={currentConversationId}
-        onNewChat={handleNewChat}
-        onSelectConversation={setCurrentConversationId}
-        onDeleteConversation={handleDeleteConversation}
-      />
+      {isClient && (
+        <Sidebar
+          conversations={conversations}
+          currentConversationId={currentConversationId}
+          onNewChat={handleNewChat}
+          onSelectConversation={setCurrentConversationId}
+          onDeleteConversation={handleDeleteConversation}
+        />
+      )}
       <div className="flex-1 flex flex-col h-full w-full">
         <BackgroundGradientAnimation />
         <HeroHighlight />
@@ -353,26 +373,26 @@ const ChatInterface = () => {
                 animate={{ opacity: 1, y: 0, height: 120 }}
                 exit={{ opacity: 0, y: -20, height: 0 }}
                 transition={{ duration: 0.3 }}
-                className="flex-none text-center py-6 relative z-10 w-full overflow-hidden"
+                className="flex-none text-center py-4 sm:py-6 relative z-10 w-full overflow-hidden"
               >
-                <div className="h-[120px] w-[500px] mx-auto">
+                <div className="h-[80px] sm:h-[100px] md:h-[120px] w-[280px] sm:w-[400px] md:w-[600px] mx-auto">
                   <TextHoverEffect
                     text="MemoBot"
-                    textSize="text-7xl"
-                    strokeWidth="0.3"
+                    textSize="text-8xl sm:text-7xl md:text-8xl"
+                    strokeWidth="0.5"
                   />
                 </div>
               </motion.div>
             )}
           </AnimatePresence>
 
-          <div className="flex-1 flex flex-col max-w-4xl w-full mx-auto px-4 sm:px-6 lg:px-8 relative z-10 overflow-hidden">
-            <div className="flex-1 overflow-y-auto pr-6 scrollbar-thin scrollbar-track-[#1C1C1C] scrollbar-thumb-[#2D2D2D] hover:scrollbar-thumb-[#3D3D3D] scroll-smooth">
+          <div className="flex-1 flex flex-col max-w-4xl w-full mx-auto px-2 sm:px-4 md:px-6 lg:px-8 relative z-10 overflow-hidden">
+            <div className="flex-1 overflow-y-auto pr-2 sm:pr-4 md:pr-6 scrollbar-thin scrollbar-track-[#1C1C1C] scrollbar-thumb-[#2D2D2D] hover:scrollbar-thumb-[#3D3D3D] scroll-smooth">
               <div className="min-h-0 h-full pb-4">
                 <AnimatePresence mode="popLayout">
                   {messages.length === 0 ? (
                     <motion.div className="h-full flex flex-col items-center justify-center">
-                      <div className="grid grid-cols-2 gap-4 w-full max-w-2xl px-4">
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 sm:gap-4 w-full max-w-2xl px-2 sm:px-4">
                         {examplePrompts.map((prompt, index) => (
                           <motion.button
                             key={index}
@@ -389,12 +409,12 @@ const ChatInterface = () => {
                             }}
                             whileTap={{ scale: 0.98 }}
                             onClick={() => setInput(prompt.text)}
-                            className="p-4 text-left rounded-xl border border-[#2D2D2D]
+                            className="p-3 sm:p-4 text-left rounded-xl border border-[#2D2D2D]
                               hover:border-[#3D3D3D] transition-all duration-300
-                              bg-[#1C1C1C] text-[#B4BCD0] text-sm
+                              bg-[#1C1C1C] text-[#B4BCD0] text-xs sm:text-sm
                               hover:shadow-[0_0_15px_rgba(0,0,0,0.2)]"
                           >
-                            <div className="flex items-center gap-3">
+                            <div className="flex items-center gap-2 sm:gap-3">
                               <span className="text-[#5C24FF]">
                                 {prompt.icon}
                               </span>
@@ -405,7 +425,7 @@ const ChatInterface = () => {
                       </div>
                     </motion.div>
                   ) : (
-                    <div className="py-6 space-y-6 pl-4">
+                    <div className="py-4 sm:py-6 space-y-4 sm:space-y-6 pl-2 sm:pl-4">
                       {messages.map((message, index) => (
                         <motion.div
                           key={index}
@@ -422,7 +442,7 @@ const ChatInterface = () => {
                           <motion.div
                             whileHover={{ scale: 1.01 }}
                             transition={{ type: 'spring', stiffness: 300 }}
-                            className={`max-w-[85%] p-4 rounded-xl shadow-lg overflow-hidden relative group
+                            className={`max-w-[95%] sm:max-w-[85%] p-3 sm:p-4 rounded-xl shadow-lg overflow-hidden relative group
                               ${
                                 message.role === 'user'
                                   ? 'bg-gradient-to-r from-[#5C24FF] to-[#8047FF] text-white'
@@ -523,16 +543,16 @@ const ChatInterface = () => {
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.5 }}
               onSubmit={handleSubmit}
-              className="flex-none py-6 bg-gradient-to-t from-[#0F0F0F] via-[#0F0F0F]/80 relative z-20"
+              className="flex-none py-4 sm:py-6 bg-gradient-to-t from-[#0F0F0F] via-[#0F0F0F]/80 relative z-20"
             >
-              <div className="flex gap-3">
+              <div className="flex gap-2 sm:gap-3">
                 <motion.input
                   type="text"
                   value={input}
                   onChange={(e) => setInput(e.target.value)}
                   placeholder="Ask me anything..."
-                  className="flex-1 p-4 rounded-xl border border-[#2D2D2D]
-                    bg-[#1C1C1C] text-[#B4BCD0]
+                  className="flex-1 p-3 sm:p-4 rounded-xl border border-[#2D2D2D]
+                    bg-[#1C1C1C] text-[#B4BCD0] text-sm sm:text-base
                     focus:outline-none focus:ring-2 focus:ring-[#5C24FF]/30
                     placeholder-[#4D4D4D]"
                   disabled={isLoading}
@@ -543,11 +563,11 @@ const ChatInterface = () => {
                   whileHover={{ scale: 1.02 }}
                   whileTap={{ scale: 0.98 }}
                   transition={{ type: 'spring', stiffness: 400 }}
-                  className="px-8 py-4 bg-gradient-to-r from-[#5C24FF] to-[#8047FF] text-white rounded-xl
+                  className="px-6 sm:px-8 py-3 sm:py-4 bg-gradient-to-r from-[#5C24FF] to-[#8047FF] text-white rounded-xl
                     hover:opacity-90 disabled:opacity-50 disabled:hover:opacity-50
                     transition-all focus:outline-none focus:ring-2 
                     focus:ring-[#5C24FF]/30 font-medium shadow-lg
-                    shadow-[#5C24FF]/20"
+                    shadow-[#5C24FF]/20 text-sm sm:text-base whitespace-nowrap"
                   disabled={isLoading}
                 >
                   {isLoading ? 'Sending...' : 'Send'}

@@ -5,7 +5,7 @@ import { motion } from 'framer-motion'
 export const TextHoverEffect = ({
   text,
   textSize = 'text-7xl',
-  strokeWidth = '0.8',
+  strokeWidth = '0.3',
 }: {
   text: string
   textSize?: string
@@ -13,28 +13,8 @@ export const TextHoverEffect = ({
 }) => {
   const svgRef = useRef<SVGSVGElement>(null)
   const [cursor, setCursor] = useState({ x: 0, y: 0 })
+  const [hovered, setHovered] = useState(false)
   const [maskPosition, setMaskPosition] = useState({ cx: '50%', cy: '50%' })
-  const [viewBox, setViewBox] = useState('0 0 500 120')
-
-  // Update viewBox based on screen size
-  useEffect(() => {
-    const updateViewBox = () => {
-      if (window.innerWidth < 640) {
-        // sm
-        setViewBox('0 0 300 100')
-      } else if (window.innerWidth < 1024) {
-        // md
-        setViewBox('0 0 400 110')
-      } else {
-        // lg and above
-        setViewBox('0 0 500 120')
-      }
-    }
-
-    updateViewBox()
-    window.addEventListener('resize', updateViewBox)
-    return () => window.removeEventListener('resize', updateViewBox)
-  }, [])
 
   useEffect(() => {
     if (svgRef.current && cursor.x !== null && cursor.y !== null) {
@@ -53,23 +33,30 @@ export const TextHoverEffect = ({
       ref={svgRef}
       width="100%"
       height="100%"
-      viewBox={viewBox}
+      viewBox="0 0 300 100"
       xmlns="http://www.w3.org/2000/svg"
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
       onMouseMove={(e) => setCursor({ x: e.clientX, y: e.clientY })}
       className="select-none"
     >
       <defs>
         <linearGradient
           id="textGradient"
-          x1="0%"
-          y1="0%"
-          x2="100%"
-          y2="0%"
           gradientUnits="userSpaceOnUse"
+          cx="50%"
+          cy="50%"
+          r="25%"
         >
-          <stop offset="0%" stopColor="#7C4DFF" />
-          <stop offset="50%" stopColor="#B388FF" />
-          <stop offset="100%" stopColor="#7C4DFF" />
+          {hovered && (
+            <>
+              <stop offset="0%" stopColor="#FFD700" />
+              <stop offset="25%" stopColor="#FF0000" />
+              <stop offset="50%" stopColor="#0066FF" />
+              <stop offset="75%" stopColor="#00FFFF" />
+              <stop offset="100%" stopColor="#8A2BE2" />
+            </>
+          )}
         </linearGradient>
 
         <motion.radialGradient
@@ -79,8 +66,8 @@ export const TextHoverEffect = ({
           animate={maskPosition}
           transition={{
             type: 'spring',
-            stiffness: 150,
-            damping: 30,
+            stiffness: 250,
+            damping: 35,
           }}
         >
           <stop offset="0%" stopColor="white" />
@@ -96,33 +83,24 @@ export const TextHoverEffect = ({
           />
         </mask>
       </defs>
-
-      {/* Base outline text */}
       <text
         x="50%"
         y="50%"
         textAnchor="middle"
         dominantBaseline="middle"
         strokeWidth={strokeWidth}
-        className={`font-bold ${textSize} fill-transparent`}
-        style={{
-          stroke: 'rgba(124, 77, 255, 0.2)',
-        }}
+        className={`font-[helvetica] font-bold stroke-neutral-200 dark:stroke-neutral-800 fill-transparent ${textSize}`}
+        style={{ opacity: hovered ? 0.7 : 0 }}
       >
         {text}
       </text>
-
-      {/* Animated outline */}
       <motion.text
         x="50%"
         y="50%"
         textAnchor="middle"
         dominantBaseline="middle"
         strokeWidth={strokeWidth}
-        className={`font-bold ${textSize} fill-transparent`}
-        style={{
-          stroke: 'rgba(179, 136, 255, 0.4)',
-        }}
+        className={`font-[helvetica] font-bold fill-transparent ${textSize} stroke-neutral-200 dark:stroke-neutral-800`}
         initial={{ strokeDashoffset: 1000, strokeDasharray: 1000 }}
         animate={{
           strokeDashoffset: 0,
@@ -131,14 +109,10 @@ export const TextHoverEffect = ({
         transition={{
           duration: 4,
           ease: 'easeInOut',
-          repeat: Infinity,
-          repeatType: 'reverse',
         }}
       >
         {text}
       </motion.text>
-
-      {/* Gradient fill on hover */}
       <text
         x="50%"
         y="50%"
@@ -147,7 +121,7 @@ export const TextHoverEffect = ({
         stroke="url(#textGradient)"
         strokeWidth={strokeWidth}
         mask="url(#textMask)"
-        className={`font-bold ${textSize} fill-transparent`}
+        className={`font-[helvetica] font-bold fill-transparent ${textSize}`}
       >
         {text}
       </text>
