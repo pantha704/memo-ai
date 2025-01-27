@@ -1,6 +1,6 @@
 'use client'
 
-import { motion, useMotionValue, useTransform } from 'framer-motion'
+import { motion } from 'framer-motion'
 import { IconPlus, IconMessage, IconTrash } from '@tabler/icons-react'
 import { useState, useEffect } from 'react'
 
@@ -26,14 +26,9 @@ export const Sidebar = ({
   onDeleteConversation,
 }: SidebarProps) => {
   const [isHovered, setIsHovered] = useState(false)
-  const [mousePosition, setMousePosition] = useState(0)
-  const [hoveredConversation, setHoveredConversation] = useState<string | null>(
-    null
-  )
 
   useEffect(() => {
     const handleMouseMove = (e: MouseEvent) => {
-      setMousePosition(e.clientX)
       if (e.clientX <= 10) {
         setIsHovered(true)
       } else if (e.clientX > 250) {
@@ -75,8 +70,6 @@ export const Sidebar = ({
               key={conv.id}
               initial={{ opacity: 0, x: -20 }}
               animate={{ opacity: 1, x: 0 }}
-              onHoverStart={() => setHoveredConversation(conv.id)}
-              onHoverEnd={() => setHoveredConversation(null)}
               className={`group relative rounded-lg transition-colors cursor-pointer
                 ${
                   currentConversationId === conv.id
@@ -107,7 +100,7 @@ export const Sidebar = ({
               {/* Delete Button */}
               <motion.button
                 initial={{ opacity: 0 }}
-                animate={{ opacity: hoveredConversation === conv.id ? 1 : 0 }}
+                animate={{ opacity: 1 }}
                 onClick={(e) => {
                   e.stopPropagation()
                   onDeleteConversation(conv.id)

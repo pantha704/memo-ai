@@ -35,73 +35,6 @@ interface Conversation {
   messages: Message[]
 }
 
-const allPrompts = [
-  {
-    icon: <IconBrain size={20} />,
-    text: 'Explain quantum computing in simple terms',
-  },
-  {
-    icon: <IconCode size={20} />,
-    text: 'Write a Python script to analyze text sentiment',
-  },
-  {
-    icon: <IconRobot size={20} />,
-    text: 'Help me debug my React component',
-  },
-  {
-    icon: <IconDatabase size={20} />,
-    text: 'Create a SQL query for user analytics',
-  },
-  {
-    icon: <IconCode size={20} />,
-    text: 'How do I implement a binary search tree?',
-  },
-  {
-    icon: <IconBrain size={20} />,
-    text: 'Explain Docker containers simply',
-  },
-  {
-    icon: <IconRobot size={20} />,
-    text: 'Help me understand React hooks',
-  },
-  {
-    icon: <IconDatabase size={20} />,
-    text: 'Write a MongoDB aggregation pipeline',
-  },
-  {
-    icon: <IconCode size={20} />,
-    text: 'Create a REST API with Express.js',
-  },
-  {
-    icon: <IconBrain size={20} />,
-    text: 'Explain microservices architecture',
-  },
-  {
-    icon: <IconRobot size={20} />,
-    text: 'Debug a memory leak in Node.js',
-  },
-  {
-    icon: <IconDatabase size={20} />,
-    text: 'Optimize a slow PostgreSQL query',
-  },
-  {
-    icon: <IconCode size={20} />,
-    text: 'Implement JWT authentication',
-  },
-  {
-    icon: <IconBrain size={20} />,
-    text: 'Explain CORS and how to handle it',
-  },
-  {
-    icon: <IconRobot size={20} />,
-    text: 'Help with TypeScript generics',
-  },
-  {
-    icon: <IconDatabase size={20} />,
-    text: 'Design a scalable database schema',
-  },
-]
-
 // Initial set of prompts that will be shown first (stable order for SSR)
 const initialPrompts = [
   {
@@ -131,7 +64,7 @@ const ChatInterface = () => {
   const [input, setInput] = useState<string>('')
   const [isLoading, setIsLoading] = useState<boolean>(false)
   const [processedMessages, setProcessedMessages] = useState<string[]>([])
-  const [examplePrompts, setExamplePrompts] = useState(initialPrompts)
+  const [examplePrompts] = useState(initialPrompts)
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const [copiedIndex, setCopiedIndex] = useState<number | null>(null)
   const [showTitle, setShowTitle] = useState(true)
@@ -142,7 +75,7 @@ const ChatInterface = () => {
     if (savedConversations) {
       const parsed = JSON.parse(savedConversations)
       setConversations(
-        parsed.map((conv: any) => ({
+        parsed.map((conv: Conversation) => ({
           ...conv,
           timestamp: new Date(conv.timestamp),
         }))
@@ -212,13 +145,38 @@ const ChatInterface = () => {
   }
 
   const updateConversationTitle = (id: string, firstMessage: string) => {
+    // Get the first message without code blocks and special characters
+    const cleanMessage = firstMessage
+      .replace(/```[\s\S]*?```/g, '') // Remove code blocks
+      .replace(/[^a-zA-Z0-9\s?.!]/g, '') // Remove special characters
+      .trim()
+
+    // Try to extract a meaningful title
+    let title = ''
+
+    // If it's a question, use the first sentence
+    if (cleanMessage.includes('?')) {
+      title = cleanMessage.split('?')[0].trim() + '?'
+    }
+    // If it contains specific keywords, use the context
+    else if (
+      cleanMessage.toLowerCase().includes('explain') ||
+      cleanMessage.toLowerCase().includes('what is') ||
+      cleanMessage.toLowerCase().includes('how to')
+    ) {
+      title = cleanMessage.split('.')[0].trim()
+    }
+    // Otherwise use the first sentence or fallback to first few words
+    else {
+      title = cleanMessage.split(/[.!]\s/)[0].trim()
+    }
+
+    // Ensure the title is not too long (max 40 chars) and ends properly
+    title = title.length > 40 ? title.slice(0, 37) + '...' : title
+
     setConversations((prev) =>
       prev.map((conv) => {
         if (conv.id === id) {
-          // Use the first ~30 characters of the first message as the title
-          const title =
-            firstMessage.split('\n')[0].slice(0, 30) +
-            (firstMessage.length > 30 ? '...' : '')
           return { ...conv, title }
         }
         return conv
