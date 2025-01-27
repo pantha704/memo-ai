@@ -1,23 +1,112 @@
 'use client'
 
-import { useState, useEffect } from 'react'
-import { motion } from 'framer-motion'
+import { useState, useEffect, useRef } from 'react'
+import { motion, AnimatePresence } from 'framer-motion'
 import DOMPurify from 'dompurify'
 import { remark } from 'remark'
 import html from 'remark-html'
 import rehypeHighlight from 'rehype-highlight'
 import 'highlight.js/styles/github-dark.css'
+import {
+  IconBrain,
+  IconCode,
+  IconDatabase,
+  IconRobot,
+} from '@tabler/icons-react'
+import { BackgroundGradientAnimation } from './ui/background'
+import { HeroHighlight } from './ui/hero-highlight'
+import { TextHoverEffect } from './ui/text-hover-effect'
 
 interface Message {
   role: 'user' | 'assistant'
   content: string
 }
 
-const examplePrompts = [
-  'Explain quantum computing in simple terms',
-  'Write a Python script to analyze text sentiment',
-  'Help me debug my React component',
-  'Create a SQL query for user analytics',
+const allPrompts = [
+  {
+    icon: <IconBrain size={20} />,
+    text: 'Explain quantum computing in simple terms',
+  },
+  {
+    icon: <IconCode size={20} />,
+    text: 'Write a Python script to analyze text sentiment',
+  },
+  {
+    icon: <IconRobot size={20} />,
+    text: 'Help me debug my React component',
+  },
+  {
+    icon: <IconDatabase size={20} />,
+    text: 'Create a SQL query for user analytics',
+  },
+  {
+    icon: <IconCode size={20} />,
+    text: 'How do I implement a binary search tree?',
+  },
+  {
+    icon: <IconBrain size={20} />,
+    text: 'Explain Docker containers simply',
+  },
+  {
+    icon: <IconRobot size={20} />,
+    text: 'Help me understand React hooks',
+  },
+  {
+    icon: <IconDatabase size={20} />,
+    text: 'Write a MongoDB aggregation pipeline',
+  },
+  {
+    icon: <IconCode size={20} />,
+    text: 'Create a REST API with Express.js',
+  },
+  {
+    icon: <IconBrain size={20} />,
+    text: 'Explain microservices architecture',
+  },
+  {
+    icon: <IconRobot size={20} />,
+    text: 'Debug a memory leak in Node.js',
+  },
+  {
+    icon: <IconDatabase size={20} />,
+    text: 'Optimize a slow PostgreSQL query',
+  },
+  {
+    icon: <IconCode size={20} />,
+    text: 'Implement JWT authentication',
+  },
+  {
+    icon: <IconBrain size={20} />,
+    text: 'Explain CORS and how to handle it',
+  },
+  {
+    icon: <IconRobot size={20} />,
+    text: 'Help with TypeScript generics',
+  },
+  {
+    icon: <IconDatabase size={20} />,
+    text: 'Design a scalable database schema',
+  },
+]
+
+// Initial set of prompts that will be shown first (stable order for SSR)
+const initialPrompts = [
+  {
+    icon: <IconBrain size={20} />,
+    text: 'Explain quantum computing in simple terms',
+  },
+  {
+    icon: <IconCode size={20} />,
+    text: 'Write a Python script to analyze text sentiment',
+  },
+  {
+    icon: <IconRobot size={20} />,
+    text: 'Help me debug my React component',
+  },
+  {
+    icon: <IconDatabase size={20} />,
+    text: 'Create a SQL query for user analytics',
+  },
 ]
 
 const ChatInterface = () => {
@@ -25,6 +114,14 @@ const ChatInterface = () => {
   const [input, setInput] = useState<string>('')
   const [isLoading, setIsLoading] = useState<boolean>(false)
   const [processedMessages, setProcessedMessages] = useState<string[]>([])
+  const [examplePrompts, setExamplePrompts] = useState(initialPrompts)
+  const messagesEndRef = useRef<HTMLDivElement>(null)
+
+  // Shuffle prompts after initial mount
+  useEffect(() => {
+    const shuffled = [...allPrompts].sort(() => Math.random() - 0.5).slice(0, 4)
+    setExamplePrompts(shuffled)
+  }, [])
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault()
@@ -97,110 +194,155 @@ const ChatInterface = () => {
     processMessages()
   }, [messages])
 
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
+  }, [messages])
+
   return (
-    <div className="relative min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 dark:from-gray-900 dark:to-gray-800">
-      {/* Animated background */}
-      <div className="absolute inset-0 bg-[url('/noise.png')] opacity-[0.015] pointer-events-none" />
-      <div className="absolute inset-0 bg-gradient-to-br from-blue-500/5 to-purple-500/5 animate-gradient" />
+    <div className="fixed inset-0 bg-[#0F0F0F]">
+      <BackgroundGradientAnimation />
+      <HeroHighlight />
+      <div className="absolute inset-0 flex flex-col h-screen">
+        <motion.div
+          initial={{ opacity: 0, y: -10 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.2 }}
+          className="flex-none text-center py-6 relative z-10"
+        >
+          <div className="h-[120px] w-[500px] mx-auto">
+            <TextHoverEffect
+              text="MemoBot"
+              textSize="text-7xl"
+              strokeWidth="0.3"
+            />
+          </div>
+        </motion.div>
 
-      <div className="relative">
-        {/* Title */}
-        <div className="text-center py-8">
-          <h1 className="text-4xl font-bold text-gray-800 dark:text-white">
-            Memo
-          </h1>
-          <p className="mt-2 text-gray-600 dark:text-gray-300">
-            Your AI-powered coding companion
-          </p>
-        </div>
-
-        <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 pb-8 flex flex-col min-h-[calc(100vh-8rem)]">
-          <div className="flex-1 overflow-y-auto mb-6 space-y-6">
-            {messages.length === 0 ? (
-              <div className="flex flex-col items-center justify-center h-[60vh] space-y-6 text-center">
-                <div className="grid grid-cols-2 gap-4 w-full max-w-2xl px-4">
-                  {examplePrompts.map((prompt, index) => (
-                    <button
-                      key={index}
-                      onClick={() => setInput(prompt)}
-                      className="p-4 text-left rounded-lg border border-gray-200 dark:border-gray-700 
-                        hover:bg-white/50 dark:hover:bg-gray-800/50 transition-colors
-                        text-gray-600 dark:text-gray-300 text-sm"
-                    >
-                      {prompt}
-                    </button>
-                  ))}
-                </div>
-              </div>
-            ) : (
-              messages.map((message, index) => (
-                <motion.div
-                  key={index}
-                  initial={{ opacity: 0, y: 20 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  className={`flex ${
-                    message.role === 'user' ? 'justify-end' : 'justify-start'
-                  }`}
-                >
-                  <div
-                    className={`max-w-[85%] p-4 rounded-lg shadow-sm backdrop-blur-sm
-                      ${
-                        message.role === 'user'
-                          ? 'bg-blue-500/90 text-white'
-                          : 'bg-white/80 dark:bg-gray-800/80 border border-gray-200 dark:border-gray-700'
-                      }`}
-                  >
-                    <div
-                      className={`prose prose-sm max-w-none break-words
-                        ${
-                          message.role === 'user'
-                            ? 'prose-invert'
-                            : 'dark:prose-invert'
-                        }
-                        prose-p:my-1 
-                        prose-pre:my-2 prose-pre:p-4 prose-pre:rounded-lg prose-pre:bg-gray-900
-                        prose-code:px-1.5 prose-code:py-0.5 prose-code:rounded-md
-                        prose-code:bg-gray-700 prose-code:text-gray-100
-                        prose-headings:mb-2 prose-headings:mt-4
-                        prose-ul:my-2 prose-li:my-0.5
-                        prose-hr:my-4`}
-                      dangerouslySetInnerHTML={{
-                        __html: processedMessages[index] || '',
-                      }}
-                    />
+        <div className="flex-1 flex flex-col max-w-4xl w-full mx-auto px-4 sm:px-6 lg:px-8 relative z-10 min-h-0">
+          <div className="flex-1 overflow-y-auto pr-6 scrollbar-thin scrollbar-track-[#1C1C1C] scrollbar-thumb-[#2D2D2D] hover:scrollbar-thumb-[#3D3D3D] min-h-0 scroll-smooth">
+            <AnimatePresence mode="popLayout">
+              {messages.length === 0 ? (
+                <motion.div className="h-full flex flex-col items-center justify-center">
+                  <div className="grid grid-cols-2 gap-4 w-full max-w-2xl px-4">
+                    {examplePrompts.map((prompt, index) => (
+                      <motion.button
+                        key={index}
+                        initial={{ opacity: 0, y: 10 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        transition={{
+                          duration: 0.2,
+                          delay: index * 0.03,
+                          ease: 'easeOut',
+                        }}
+                        whileHover={{
+                          scale: 1.02,
+                          backgroundColor: 'rgba(255, 255, 255, 0.03)',
+                        }}
+                        whileTap={{ scale: 0.98 }}
+                        onClick={() => setInput(prompt.text)}
+                        className="p-4 text-left rounded-xl border border-[#2D2D2D]
+                          hover:border-[#3D3D3D] transition-all duration-300
+                          bg-[#1C1C1C] text-[#B4BCD0] text-sm
+                          hover:shadow-[0_0_15px_rgba(0,0,0,0.2)]"
+                      >
+                        <div className="flex items-center gap-3">
+                          <span className="text-[#5C24FF]">{prompt.icon}</span>
+                          <span>{prompt.text}</span>
+                        </div>
+                      </motion.button>
+                    ))}
                   </div>
                 </motion.div>
-              ))
-            )}
+              ) : (
+                <div className="py-6 space-y-6 pl-4">
+                  {messages.map((message, index) => (
+                    <motion.div
+                      key={index}
+                      initial={{ opacity: 0, y: 20 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      exit={{ opacity: 0, y: -20 }}
+                      transition={{ duration: 0.3 }}
+                      className={`flex ${
+                        message.role === 'user'
+                          ? 'justify-end'
+                          : 'justify-start'
+                      }`}
+                    >
+                      <motion.div
+                        whileHover={{ scale: 1.01 }}
+                        transition={{ type: 'spring', stiffness: 300 }}
+                        className={`max-w-[85%] p-4 rounded-xl shadow-lg overflow-hidden
+                          ${
+                            message.role === 'user'
+                              ? 'bg-gradient-to-r from-[#5C24FF] to-[#8047FF] text-white'
+                              : 'bg-[#1C1C1C] border border-[#2D2D2D] text-white'
+                          }`}
+                      >
+                        <div
+                          className={`prose prose-sm max-w-none break-words prose-invert overflow-x-auto
+                            ${
+                              message.role === 'user'
+                                ? 'prose-p:text-white/90'
+                                : 'prose-p:text-white/90'
+                            }
+                            prose-pre:my-2 prose-pre:p-4 prose-pre:rounded-lg prose-pre:bg-[#0F0F0F]
+                            prose-code:px-1.5 prose-code:py-0.5 prose-code:rounded-md
+                            prose-code:bg-[#0F0F0F] prose-code:text-[#ECBFBF]
+                            prose-headings:mb-2 prose-headings:mt-4 prose-headings:text-[#ECBFBF]
+                            prose-ul:my-2 prose-li:my-0.5 prose-li:text-white/90
+                            prose-hr:my-4
+                            prose-strong:text-[#ECBFBF]
+                            prose-a:text-[#5C24FF]
+                            [&_pre]:overflow-x-auto [&_pre]:scrollbar-thin [&_pre]:scrollbar-track-[#0F0F0F] [&_pre]:scrollbar-thumb-[#2D2D2D]`}
+                          dangerouslySetInnerHTML={{
+                            __html: processedMessages[index] || '',
+                          }}
+                        />
+                      </motion.div>
+                    </motion.div>
+                  ))}
+                  <div ref={messagesEndRef} className="h-4" />
+                </div>
+              )}
+            </AnimatePresence>
           </div>
 
-          <form
+          <motion.form
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.5 }}
             onSubmit={handleSubmit}
-            className="sticky bottom-0 pt-4 pb-6 bg-gradient-to-t from-white dark:from-gray-900"
+            className="flex-none py-6 bg-gradient-to-t from-[#0F0F0F] via-[#0F0F0F]/80 relative z-20"
           >
-            <div className="flex gap-3 max-w-4xl mx-auto">
-              <input
+            <div className="flex gap-3">
+              <motion.input
                 type="text"
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
                 placeholder="Ask me anything..."
-                className="flex-1 p-4 rounded-lg border border-gray-200 dark:border-gray-700 
-                  bg-white/80 dark:bg-gray-800/80 backdrop-blur-sm
-                  focus:outline-none focus:ring-2 focus:ring-blue-500
-                  placeholder-gray-400 dark:placeholder-gray-500"
+                className="flex-1 p-4 rounded-xl border border-[#2D2D2D]
+                  bg-[#1C1C1C] text-[#B4BCD0]
+                  focus:outline-none focus:ring-2 focus:ring-[#5C24FF]/30
+                  placeholder-[#4D4D4D]"
                 disabled={isLoading}
+                whileFocus={{ scale: 1.01 }}
               />
-              <button
+              <motion.button
                 type="submit"
-                className="px-8 py-4 bg-blue-600 text-white rounded-lg hover:bg-blue-700 
-                  disabled:opacity-50 transition-colors focus:outline-none focus:ring-2 
-                  focus:ring-blue-500 font-medium backdrop-blur-sm"
+                whileHover={{ scale: 1.02 }}
+                whileTap={{ scale: 0.98 }}
+                transition={{ type: 'spring', stiffness: 400 }}
+                className="px-8 py-4 bg-gradient-to-r from-[#5C24FF] to-[#8047FF] text-white rounded-xl
+                  hover:opacity-90 disabled:opacity-50 disabled:hover:opacity-50
+                  transition-all focus:outline-none focus:ring-2 
+                  focus:ring-[#5C24FF]/30 font-medium shadow-lg
+                  shadow-[#5C24FF]/20"
                 disabled={isLoading}
               >
                 {isLoading ? 'Sending...' : 'Send'}
-              </button>
+              </motion.button>
             </div>
-          </form>
+          </motion.form>
         </div>
       </div>
     </div>
